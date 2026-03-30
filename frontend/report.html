@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Audit Report - Health AI</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="styles.css?v=20260356" />
+  <style>
+    .report-container { max-width: 1000px; margin: 0 auto; padding: 24px; }
+    .report-header { text-align: center; padding: 32px 24px; background: var(--bg-secondary); border-radius: var(--radius-lg); border: 1px solid var(--border-subtle); margin-bottom: 24px; }
+    .report-header h1 { margin: 0 0 8px; font-size: 24px; font-weight: 600; }
+    .report-meta { color: var(--text-secondary); font-size: 14px; }
+    .risk-dashboard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .risk-card { padding: 24px; border-radius: var(--radius); text-align: center; border: 1px solid var(--border-subtle); position: relative; overflow: hidden; }
+    .risk-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; }
+    .risk-card.high { background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05)); }
+    .risk-card.high::before { background: #ef4444; }
+    .risk-card.high .risk-number { color: #ef4444; }
+    .risk-card.medium { background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.05)); }
+    .risk-card.medium::before { background: #f59e0b; }
+    .risk-card.medium .risk-number { color: #f59e0b; }
+    .risk-card.low { background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05)); }
+    .risk-card.low::before { background: #22c55e; }
+    .risk-card.low .risk-number { color: #22c55e; }
+    .risk-card.total { background: var(--bg-hover); }
+    .risk-card.total::before { background: var(--accent); }
+    .risk-card.total .risk-number { color: var(--accent); }
+    .risk-number { font-size: 42px; font-weight: 700; line-height: 1; margin-bottom: 8px; }
+    .risk-label { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
+    .issues-section { background: var(--bg-secondary); border-radius: var(--radius); border: 1px solid var(--border-subtle); overflow: hidden; }
+    .issues-header { padding: 16px 20px; background: var(--bg-hover); border-bottom: 1px solid var(--border-subtle); font-weight: 600; font-size: 14px; }
+    .issue-category { border-bottom: 1px solid var(--border-subtle); }
+    .issue-category:last-child { border-bottom: none; }
+    .category-header { padding: 14px 20px; display: flex; align-items: center; gap: 10px; cursor: pointer; transition: background 150ms ease; }
+    .category-header:hover { background: var(--bg-hover); }
+    .category-icon { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+    .category-icon.high { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .category-icon.medium { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+    .category-icon.low { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+    .category-name { flex: 1; font-weight: 500; }
+    .category-count { padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+    .category-count.high { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .category-count.medium { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+    .category-count.low { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+    .category-arrow { color: var(--text-tertiary); transition: transform 200ms ease; }
+    .category-arrow.expanded { transform: rotate(90deg); }
+    .issue-list { display: none; padding: 0 20px 16px; }
+    .issue-list.expanded { display: block; }
+    .issue-item { padding: 12px; margin-bottom: 8px; background: var(--bg-tertiary); border-radius: var(--radius-sm); border-left: 3px solid var(--border-subtle); }
+    .issue-item.high { border-left-color: #ef4444; }
+    .issue-item.medium { border-left-color: #f59e0b; }
+    .issue-item.low { border-left-color: #22c55e; }
+    .issue-title { font-weight: 500; margin-bottom: 4px; font-size: 13px; }
+    .issue-location { font-family: monospace; font-size: 11px; color: var(--text-tertiary); background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; display: inline-block; margin-bottom: 6px; }
+    .issue-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
+    .loading { text-align: center; padding: 60px; color: var(--text-secondary); }
+    .error { text-align: center; padding: 40px; color: var(--error); background: var(--error-subtle); border-radius: var(--radius); margin: 20px; }
+    .raw-report { background: var(--bg-secondary); padding: 20px; border-radius: var(--radius); white-space: pre-wrap; font-family: monospace; font-size: 12px; overflow-x: auto; max-height: 600px; overflow-y: auto; }
+  </style>
+</head>
+<body>
+  <header class="brand-nav workspace-header">
+    <div class="brand-stack">
+      <span class="brand-logo">AI</span>
+      <h1 class="brand-name">Health AI</h1>
+    </div>
+    <a class="ghost-btn" href="workspace.html" id="back-link">← Back to Dashboard</a>
+  </header>
+
+  <div class="report-container" id="report-container">
+    <div class="loading">Loading report...</div>
+  </div>
+
+  <script>
+    const API_BASE = (window.location.hostname === 'localhost' && window.location.port === '3000')
+      ? 'http://localhost:8000'
+      : window.location.origin;
+
+    function getTaskId() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('task');
+    }
+
+    const RISK_CONFIG = {
+      high: { keywords: ['arbitrary-send-eth', 'reentrancy', 'unchecked-transfer', 'delegatecall'], label: 'High Risk' },
+      medium: { keywords: ['divide-before-multiply', 'incorrect-equality', 'timestamp', 'low-level-calls'], label: 'Medium Risk' },
+      low: { keywords: ['assembly', 'naming-convention', 'pragma', 'solc-version', 'unindexed'], label: 'Low Risk' }
+    };
+
+    const DETECTOR_NAMES = {
+      'arbitrary-send-eth': 'Arbitrary ETH Transfer',
+      'reentrancy': 'Reentrancy',
+      'unchecked-transfer': 'Unchecked Transfer Return',
+      'delegatecall': 'Delegatecall Risk',
+      'divide-before-multiply': 'Divide Before Multiply',
+      'incorrect-equality': 'Dangerous Strict Equality',
+      'timestamp': 'Timestamp Dependency',
+      'low-level-calls': 'Low-Level Calls',
+      'assembly': 'Inline Assembly',
+      'naming-convention': 'Naming Convention',
+      'pragma': 'Compiler Version Mismatch',
+      'solc-version': 'Solidity Version Issue',
+      'unindexed-event-address': 'Unindexed Event Parameter',
+      'unused-return': 'Unused Return Value',
+      'missing-zero-check': 'Missing Zero-Address Check'
+    };
+    
+    function parseReport(text) {
+      try {
+        const detectors = [];
+        const lines = text.split(/\r?\n/);
+        let currentDetector = "";
+        let currentDesc = "";
+        
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          
+          if (line.startsWith("Detector:")) {
+            currentDetector = line.replace("Detector:", "").trim();
+            currentDesc = "";
+            continue;
+          }
+          
+          if (line.match(/^\s/)) continue;
+          
+          if (currentDetector && !currentDesc && line.trim() && !line.startsWith("Reference:")) {
+            currentDesc = line.trim().replace(/^[-•]\s*/, '');
+            continue;
+          }
+          
+          // 匹配位置
+          let location = null;
+          const match1 = line.match(/(\w+\.sol#\d+(?:-\d+)?)/);
+          const match2 = line.match(/in\s+\w+\([^)]*\)\s*\(([^)]+\.sol#\d+(?:-\d+)?)\)/);
+          const match3 = line.match(/\((src\/[^)]+\.sol#\d+(?:-\d+)?)\)/);
+          location = match1 ? match1[1] : (match2 ? match2[1] : (match3 ? match3[1] : null));
+          
+          if (location && currentDetector) {
+            let level = 'low';
+            if (RISK_CONFIG.high.keywords.some(k => currentDetector.toLowerCase().includes(k))) level = 'high';
+            else if (RISK_CONFIG.medium.keywords.some(k => currentDetector.toLowerCase().includes(k))) level = 'medium';
+            
+            detectors.push({ name: currentDetector, desc: currentDesc || "See report for details", location, level });
+          }
+        }
+        return detectors;
+      } catch (e) {
+        console.error("Parse error:", e);
+        return [];
+      }
+    }
+    
+    function generateKeyRisksSummary(detectors) {
+      const summary = [];
+      
+      // 按 detector 名称分组
+      const grouped = {};
+      for (const d of detectors) {
+        if (!grouped[d.name]) grouped[d.name] = [];
+        grouped[d.name].push(d);
+      }
+      
+      // ETH 转账风险 (arbitrary-send-eth, low-level-calls)
+      const ethCalls = detectors.filter(d => 
+        d.name.toLowerCase().includes('arbitrary-send-eth') || 
+        d.name.toLowerCase().includes('low-level-calls')
+      );
+      if (ethCalls.length > 0) {
+        const functions = [...new Set(ethCalls.map(d => d.location.split('.')[1]?.split('(')[0] || '').filter(Boolean))].slice(0, 5);
+        summary.push({
+          level: 'high',
+          title: 'ETH Transfer Risk',
+          desc: `${functions.join(', ') || 'Multiple functions'} use .call to send ETH — ensure reentrancy protection and access control are in place.`
+        });
+      }
+      
+      // 时间依赖风险 (timestamp)
+      const timestamps = detectors.filter(d => d.name.toLowerCase().includes('timestamp'));
+      if (timestamps.length > 0) {
+        summary.push({
+          level: 'medium',
+          title: 'Timestamp Dependency',
+          desc: `block.timestamp used in ${timestamps.length} location(s) — may be manipulated by miners in critical logic.`
+        });
+      }
+      
+      // 精度问题 (divide-before-multiply)
+      const divisions = detectors.filter(d => d.name.toLowerCase().includes('divide-before-multiply'));
+      if (divisions.length > 0) {
+        summary.push({
+          level: 'medium',
+          title: 'Precision Loss',
+          desc: 'Divide-before-multiply detected — may cause integer truncation and precision loss.'
+        });
+      }
+      
+      // 严格等式问题
+      const equalities = detectors.filter(d => d.name.toLowerCase().includes('incorrect-equality'));
+      if (equalities.length > 0) {
+        summary.push({
+          level: 'medium',
+          title: 'Dangerous Strict Equality',
+          desc: 'Strict equality used for state checks — consider using boolean flags or range comparisons instead.'
+        });
+      }
+      
+      // 重入攻击风险
+      const reentrancy = detectors.filter(d => d.name.toLowerCase().includes('reentrancy'));
+      if (reentrancy.length > 0) {
+        summary.push({
+          level: 'high',
+          title: 'Reentrancy Risk',
+          desc: 'Potential reentrancy vulnerability detected — use the Checks-Effects-Interactions pattern or ReentrancyGuard.'
+        });
+      }
+      
+      if (summary.length === 0) return '';
+      
+      let html = `<div class="issues-section" style="margin-bottom: 24px;"><div class="issues-header">⚠️ Key Risk Points</div><div style="padding: 16px 20px;">`;
+      for (const risk of summary) {
+        html += `<div class="issue-item ${risk.level}" style="margin-bottom: 12px;"><div class="issue-title">${risk.level === 'high' ? '🔴' : '🟡'} ${risk.title}</div><div class="issue-desc">${risk.desc}</div></div>`;
+      }
+      html += `</div></div>`;
+      return html;
+    }
+    
+    function renderCategory(level, icon, items) {
+      const config = RISK_CONFIG[level];
+      const grouped = {};
+      for (const item of items) {
+        if (!grouped[item.name]) grouped[item.name] = [];
+        grouped[item.name].push(item);
+      }
+      
+      let html = `<div class="issue-category"><div class="category-header" data-category="${level}"><div class="category-icon ${level}">${icon}</div><div class="category-name">${config.label}</div><div class="category-count ${level}">${items.length}</div><div class="category-arrow">▶</div></div><div class="issue-list" id="list-${level}">`;
+      
+      for (const [name, groupItems] of Object.entries(grouped)) {
+        const cnName = DETECTOR_NAMES[name] || name;
+        html += `<div class="issue-item ${level}"><div class="issue-title">${cnName}</div><div class="issue-location">📍 ${groupItems.length} occurrence(s)</div><div class="issue-desc">${groupItems[0].desc || 'See report for details'}</div></div>`;
+      }
+      
+      html += '</div></div>';
+      return html;
+    }
+    
+    // Simple markdown to HTML converter for security audit reports
+    function markdownToHtml(markdown) {
+      if (!markdown) return '';
+      let html = markdown
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        // Restore HTML entities that were present in the source markdown
+        .replace(/&amp;nbsp;/g, '&nbsp;')
+        .replace(/&amp;lt;/g, '&lt;')
+        .replace(/&amp;gt;/g, '&gt;');
+      
+      // Headers (#### must be replaced before ## and ### to avoid partial matches)
+      html = html.replace(/^#### (.*)$/gm, '<h4 style="color:var(--text-primary);font-size:13px;font-weight:600;margin:10px 0 3px;">$1</h4>');
+      html = html.replace(/^# (.*)$/gm, '<h1 style="color:var(--text-primary);font-size:20px;margin:16px 0 8px;">$1</h1>');
+      html = html.replace(/^## (.*)$/gm, '<h2 style="color:var(--text-primary);font-size:16px;margin:14px 0 6px;">$1</h2>');
+      html = html.replace(/^### (.*)$/gm, '<h3 style="color:var(--text-primary);font-size:14px;margin:12px 0 4px;">$1</h3>');
+      
+      // Bold
+      html = html.replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--text-primary);">$1</strong>');
+      
+      // List items (but not table separators)
+      html = html.replace(/^- (.*)$/gm, '<li style="margin:4px 0;color:var(--text-secondary);">$1</li>');
+      html = html.replace(/^> (.*)$/gm, '<blockquote style="border-left:3px solid var(--accent);padding-left:10px;margin:8px 0;color:var(--text-secondary);">$1</blockquote>');
+      
+      // Wrap lists
+      html = html.replace(/(<li.*<\/li>\n?)+/g, '<ul style="margin:8px 0;padding-left:20px;">$&</ul>');
+      
+      // Tables - simple handling
+      const lines = html.split('\n');
+      let inTable = false;
+      let tableHtml = '';
+      const result = [];
+      
+      for (const line of lines) {
+        if (line.includes('|')) {
+          if (!inTable) {
+            inTable = true;
+            tableHtml = '<table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:12px;">';
+          }
+          const cells = line.split('|').filter(c => c.trim());
+          const isSeparator = cells.length > 0 && cells.every(c => /^\s*:?-+:?\s*$/.test(c));
+          if (cells.length > 0 && !isSeparator) {
+            const isHeader = result.length === 0 || (inTable && tableHtml.split('<tr>').length === 2);
+            const tag = isHeader ? 'th' : 'td';
+            const style = isHeader 
+              ? 'background:var(--bg-hover);padding:8px;border:1px solid var(--border-subtle);text-align:left;font-weight:600;' 
+              : 'padding:8px;border:1px solid var(--border-subtle);color:var(--text-secondary);';
+            tableHtml += '<tr>' + cells.map(c => `<${tag} style="${style}">${c.trim()}</${tag}>`).join('') + '</tr>';
+          }
+        } else {
+          if (inTable) {
+            tableHtml += '</table>';
+            result.push(tableHtml);
+            inTable = false;
+            tableHtml = '';
+          }
+          result.push(line);
+        }
+      }
+      if (inTable) {
+        tableHtml += '</table>';
+        result.push(tableHtml);
+      }
+      html = result.join('\n');
+      
+      // Line breaks
+      html = html.replace(/\n/g, '<br>');
+      
+      return html;
+    }
+    
+    async function loadReport() {
+      const taskId = getTaskId();
+      const container = document.getElementById('report-container');
+      
+      if (!taskId) {
+        container.innerHTML = '<div class="error">❌ Missing task ID. Please add ?task=<taskId> to the URL.</div>';
+        return;
+      }
+      
+      try {
+        const taskResp = await fetch(`${API_BASE}/api/tasks/${taskId}`);
+        if (!taskResp.ok) throw new Error('Failed to fetch task: ' + taskResp.status);
+        const task = await taskResp.json();
+
+        if (task.status !== 'completed') {
+          container.innerHTML = `<div class="error">⏳ Task not yet completed. Current status: ${task.status}</div>`;
+          return;
+        }
+        
+        // Update back link based on skill type
+        const backLink = document.getElementById('back-link');
+        if (backLink) {
+          backLink.href = `workspace.html#${task.skillType}`;
+        }
+        
+        const reportResp = await fetch(`${API_BASE}/api/tasks/${taskId}/report`);
+        if (!reportResp.ok) throw new Error('Failed to fetch report: ' + reportResp.status);
+        const reportText = await reportResp.text();
+        
+        // Handle different report types
+        if (task.skillType === 'skill-security-audit') {
+          // Parse security audit report
+          const scores = {};
+          const recs = [];
+          const warnings = [];
+          const permissions = [];
+          let inPermissions = false;
+          
+          const lines = reportText.split('\n');
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            // Parse Safety Scores — new table format:
+            //   | 🏆 **Overall Security** | **83/100** | ... |
+            //   | 🔏 Privacy | 95/100 | ... |
+            // Also supports old plain-text format: "- Privacy: 35" / "隐私安全：35/100"
+
+            // Overall Security (table format)
+            if (/Overall Security/.test(line)) {
+              const m = line.match(/\*?\*?(\d+)\/100/);
+              if (m) scores['Overall'] = parseInt(m[1]);
+            }
+            // Overall Safety (old plain format)
+            if (!scores['Overall']) {
+              const m = line.match(/(?:Overall Safety|综合安全评分)[:：\/]?\s*(\d+)/i);
+              if (m) scores['Overall'] = parseInt(m[1]);
+            }
+
+            // Privacy
+            if (/\|\s*[^\|]*Privacy/.test(line)) {
+              const m = line.match(/\|\s*[^\|]*Privacy[^\|]*\|\s*\*?\*?(\d+)\/100/i);
+              if (m) scores['Privacy'] = parseInt(m[1]);
+            } else {
+              const m = line.match(/(?:^-\s*Privacy|隐私安全)[:：\/]?\s*(\d+)/i);
+              if (m) scores['Privacy'] = parseInt(m[1]);
+            }
+
+            // Privilege
+            if (/\|\s*[^\|]*Privilege/.test(line)) {
+              const m = line.match(/\|\s*[^\|]*Privilege[^\|]*\|\s*\*?\*?(\d+)\/100/i);
+              if (m) scores['Privilege'] = parseInt(m[1]);
+            } else {
+              const m = line.match(/(?:^-\s*Privilege|权限安全)[:：\/]?\s*(\d+)/i);
+              if (m) scores['Privilege'] = parseInt(m[1]);
+            }
+
+            // Integrity (replaces Memory)
+            if (/\|\s*[^\|]*Integrity/.test(line)) {
+              const m = line.match(/\|\s*[^\|]*Integrity[^\|]*\|\s*\*?\*?(\d+)\/100/i);
+              if (m) scores['Integrity'] = parseInt(m[1]);
+            }
+
+            // Dependency Risk (replaces Token)
+            if (/\|\s*[^\|]*Dependency Risk/.test(line)) {
+              const m = line.match(/\|\s*[^\|]*Dependency Risk[^\|]*\|\s*\*?\*?(\d+)\/100/i);
+              if (m) scores['SupplyChain'] = parseInt(m[1]);
+            }
+
+            // Stability (mapped to Failure key)
+            if (/\|\s*[^\|]*Stability/.test(line)) {
+              const m = line.match(/\|\s*[^\|]*Stability[^\|]*\|\s*\*?\*?(\d+)\/100/i);
+              if (m) scores['Failure'] = parseInt(m[1]);
+            } else {
+              const m = line.match(/(?:^-\s*(?:Failure Rate|Stability)|稳定性)[:：\/]?\s*(\d+)/i);
+              if (m) scores['Failure'] = parseInt(m[1]);
+            }
+          }
+          
+          // Parse Recommendations
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (line.match(/^## Recommendations/)) {
+              let j = i + 1;
+              while (j < lines.length && !lines[j].match(/^## /)) {
+                if (lines[j].match(/^- /)) recs.push(lines[j].replace(/^- /, ''));
+                j++;
+              }
+            }
+            // Parse Warnings
+            if (line.match(/^## Warnings/)) {
+              let j = i + 1;
+              while (j < lines.length && !lines[j].match(/^## /)) {
+                if (lines[j].match(/^- /)) warnings.push(lines[j].replace(/^- /, ''));
+                j++;
+              }
+            }
+          }
+          
+          // Calculate overall score if not already parsed
+          let overallScore = scores['Overall'] || scores['overallScore'] || 0;
+          if (!overallScore) {
+            const scoreValues = Object.values(scores).filter(s => s > 0);
+            overallScore = scoreValues.length ? Math.round(scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length) : 0;
+          }
+          
+          // Render security audit dashboard
+          document.title = 'Skill Security Audit Report - Health AI';
+          const updatedAt = task.updatedAt ? new Date(task.updatedAt).toLocaleString() : 'Unknown';
+
+          // Get scores (0-100, higher = safer)
+          overallScore = overallScore || 0;
+          const privacyScore     = scores['Privacy']     || scores['privacyScore']    || 0;
+          const privilegeScore   = scores['Privilege']   || scores['privilegeScore']  || 0;
+          const integrityScore   = scores['Integrity']   || scores['integrityScore']  || 0;
+          const supplyChainScore = scores['SupplyChain'] || scores['supplyChainScore']|| 0;
+          const failureScore     = scores['Failure']     || scores['failureScore']    || 0;
+
+          let html = '<div class="report-header"><h1>🔒 Skill Security Audit Report</h1><div class="report-meta">Task ID: ' + task.taskId + ' · Scanned: ' + updatedAt + '</div></div>';
+
+          // Score dashboard — all 6 dimensions (higher = safer)
+          function getScoreClass(score) {
+            if (score >= 80) return 'low';
+            if (score >= 60) return 'total';
+            if (score >= 40) return 'medium';
+            return 'high';
+          }
+
+          html += '<div class="risk-dashboard" style="grid-template-columns: repeat(6, 1fr);">';
+          html += '<div class="risk-card ' + getScoreClass(overallScore)     + '"><div class="risk-number">' + overallScore     + '</div><div class="risk-label">📊 Overall</div></div>';
+          html += '<div class="risk-card ' + getScoreClass(privacyScore)     + '"><div class="risk-number">' + privacyScore     + '</div><div class="risk-label">🔏 Privacy</div></div>';
+          html += '<div class="risk-card ' + getScoreClass(privilegeScore)   + '"><div class="risk-number">' + privilegeScore   + '</div><div class="risk-label">🔐 Privilege</div></div>';
+          html += '<div class="risk-card ' + getScoreClass(integrityScore)   + '"><div class="risk-number">' + integrityScore   + '</div><div class="risk-label">🛡️ Integrity</div></div>';
+          html += '<div class="risk-card ' + getScoreClass(supplyChainScore) + '"><div class="risk-number">' + supplyChainScore + '</div><div class="risk-label">🔗 Dependency Risk</div></div>';
+          html += '<div class="risk-card ' + getScoreClass(failureScore)     + '"><div class="risk-number">' + failureScore     + '</div><div class="risk-label">✅ Stability</div></div>';
+          html += '</div>';
+
+          // Key recommendations
+          if (recs.length > 0) {
+            html += '<div class="issues-section" style="margin-bottom:24px;"><div class="issues-header">🔴 Key Recommendations</div><div style="padding:16px 20px;">';
+            recs.forEach(rec => {
+              html += '<div class="issue-item high" style="margin-bottom:8px;"><div class="issue-desc">' + rec + '</div></div>';
+            });
+            html += '</div></div>';
+          }
+
+          // Warnings
+          if (warnings.length > 0) {
+            html += '<div class="issues-section" style="margin-bottom:24px;"><div class="issues-header">⚠️ Warnings</div><div style="padding:16px 20px;">';
+            warnings.forEach(warn => {
+              html += '<div class="issue-item medium" style="margin-bottom:8px;"><div class="issue-desc">' + warn + '</div></div>';
+            });
+            html += '</div></div>';
+          }
+
+          // Full report
+          html += '<div class="issues-section"><div class="issues-header">📄 Full Report</div><div style="padding:16px 20px;"><div class="raw-report">' + markdownToHtml(reportText) + '</div></div></div>';
+          
+          container.innerHTML = html;
+          return;
+        } else if (task.skillType === 'skill-stress-lab') {
+          // Render stress test report — enhanced dashboard like security audit
+          document.title = 'Stress Test Report - Health AI';
+          const updatedAt = task.updatedAt ? new Date(task.updatedAt).toLocaleString() : 'Unknown';
+
+          // --- Parse 5-dimension scores ---
+          const stressScores = {};
+          const stressLines = reportText.split('\n');
+          for (let i = 0; i < stressLines.length; i++) {
+            const line = stressLines[i];
+            const stabilityM = line.match(/(?:🛡️\s*)?(?:\*\*)?(?:稳定性|Stability)(?:\*\*)?[^\d]*(\d+)\/100/i);
+            if (stabilityM) stressScores['Stability'] = parseInt(stabilityM[1]);
+            const performanceM = line.match(/(?:⚡\s*)?(?:\*\*)?(?:性能|Performance)(?:\*\*)?[^\d]*(\d+)\/100/i);
+            if (performanceM) stressScores['Performance'] = parseInt(performanceM[1]);
+            const resourceM = line.match(/(?:💾\s*)?(?:\*\*)?(?:资源|Resource)(?:\*\*)?[^\d]*(\d+)\/100/i);
+            if (resourceM) stressScores['Resource'] = parseInt(resourceM[1]);
+            const consistencyM = line.match(/(?:🔄\s*)?(?:\*\*)?(?:一致性|Consistency)(?:\*\*)?[^\d]*(\d+)\/100/i);
+            if (consistencyM) stressScores['Consistency'] = parseInt(consistencyM[1]);
+            const recoveryM = line.match(/(?:🆘\s*)?(?:\*\*)?(?:恢复|Recovery)(?:\*\*)?[^\d]*(\d+)\/100/i);
+            if (recoveryM) stressScores['Recovery'] = parseInt(recoveryM[1]);
+            const overallM = line.match(/(?:📊\s*|🎯\s*|综合|Overall)[^\d]*(\d+)\/100/i);
+            if (overallM && !stressScores['Overall']) stressScores['Overall'] = parseInt(overallM[1]);
+          }
+
+          const stStability    = stressScores['Stability']    || 0;
+          const stPerformance  = stressScores['Performance']  || 0;
+          const stResource     = stressScores['Resource']     || 0;
+          const stConsistency  = stressScores['Consistency']  || 0;
+          const stRecovery     = stressScores['Recovery']     || 0;
+          let stOverall = stressScores['Overall'] || 0;
+          if (!stOverall) {
+            const vals = [stStability, stPerformance, stResource, stConsistency, stRecovery].filter(s => s > 0);
+            stOverall = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
+          }
+
+          function getScoreClass(score) {
+            if (score >= 80) return 'low';
+            if (score >= 60) return 'total';
+            if (score >= 40) return 'medium';
+            return 'high';
+          }
+
+          // --- Parse key metrics (supports both list "- Key: Val" and table "| Key | Val |" formats) ---
+          const successRateM = reportText.match(/(\d+)\/(\d+)\s*\(([^)]+)\)/);
+          const totalRunsM   = reportText.match(/(?:Total Runs|总次数)[:\s|]*(\d+)/);
+          const avgDurM      = reportText.match(/Avg Duration[:\s|]*([\d.]+)s/);
+          const p95DurM      = reportText.match(/P95 Duration[:\s|]*([\d.]+)s/);
+          const testRunsM    = reportText.match(/Test Runs[:\s|]*(\d+)/);
+          const concurrencyM = reportText.match(/Concurrency[:\s|]*(\d+)/);
+          const commandM     = reportText.match(/Command:\s*`([^`]+)`/);
+
+          const testRuns    = testRunsM ? testRunsM[1] : '0';
+          const totalRuns   = totalRunsM ? parseInt(totalRunsM[1]) : parseInt(testRuns);
+          const successes   = successRateM ? parseInt(successRateM[1]) : totalRuns;
+          const successRate = successRateM ? successRateM[3] : (totalRuns ? '100.0%' : '-');
+          const failures    = totalRuns - successes;
+          const avgDuration = avgDurM ? avgDurM[1] + 's' : '-';
+          const p95Duration = p95DurM ? p95DurM[1] + 's' : '-';
+          const concurrency = concurrencyM ? concurrencyM[1] : '-';
+
+          // --- Parse failure samples ---
+          const failureSamples = [];
+          const failRegex = /Run #(\d+)[\s(]*exit (\d+)[,)]\s*(?:duration\s*)?([\d.]+)s/g;
+          let fm;
+          while ((fm = failRegex.exec(reportText)) !== null) {
+            failureSamples.push({ run: fm[1], exitCode: fm[2], duration: fm[3] });
+          }
+
+          // --- Build HTML ---
+          let html = '<div class="report-header"><h1>🧪 Stress Test Report</h1><div class="report-meta">Task ID: ' + task.taskId + ' · Scanned: ' + updatedAt + '</div></div>';
+
+          // Score dashboard — 6 cards
+          html += '<div class="risk-dashboard" style="grid-template-columns: repeat(6, 1fr);">';
+          html += '<div class="risk-card ' + getScoreClass(stOverall)     + '"><div class="risk-number">' + stOverall     + '</div><div class="risk-label">📊 Overall</div></div>';
+          html += '<div class="risk-card ' + getScoreClass(stStability)   + '"><div class="risk-number">' + stStability   + '</div><div class="risk-label">🛡️ Stability</div></div>';
+          html += '<div class="risk-card ' + getScoreClass(stPerformance) + '"><div class="risk-number">' + stPerformance + '</div><div class="risk-label">⚡ Performance</div></div>';
+          html += '<div class="risk-card ' + getScoreClass(stResource)    + '"><div class="risk-number">' + stResource    + '</div><div class="risk-label">💾 Resource</div></div>';
+          html += '<div class="risk-card ' + getScoreClass(stConsistency) + '"><div class="risk-number">' + stConsistency + '</div><div class="risk-label">🔄 Consistency</div></div>';
+          html += '<div class="risk-card ' + getScoreClass(stRecovery)    + '"><div class="risk-number">' + stRecovery    + '</div><div class="risk-label">🆘 Recovery</div></div>';
+          html += '</div>';
+
+          // Score legend
+          html += '<div style="margin-bottom:24px;padding:10px 16px;background:var(--bg-secondary);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);font-size:12px;color:var(--text-tertiary);text-align:center;">Score: 80-100 = Excellent 🟢 &nbsp;|&nbsp; 60-79 = Good 🔵 &nbsp;|&nbsp; 40-59 = Caution 🟡 &nbsp;|&nbsp; &lt;40 = Risk 🔴</div>';
+
+          // Test configuration section — compact single-row layout
+          html += '<div class="issues-section" style="margin-bottom:24px;"><div class="issues-header">⚙️ Test Configuration</div><div style="padding:12px 20px;">';
+          html += '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:0;border:1px solid var(--border-subtle);border-radius:var(--radius-sm);overflow:hidden;">';
+          html += '<div style="padding:10px 20px;display:flex;flex-direction:column;gap:2px;border-right:1px solid var(--border-subtle);"><span style="font-size:11px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.05em;">Test Runs</span><span style="font-size:20px;font-weight:700;color:var(--text-primary);">' + testRuns + '</span></div>';
+          html += '<div style="padding:10px 20px;display:flex;flex-direction:column;gap:2px;border-right:1px solid var(--border-subtle);"><span style="font-size:11px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.05em;">Concurrency</span><span style="font-size:20px;font-weight:700;color:var(--text-primary);">' + concurrency + '</span></div>';
+          if (commandM) {
+            html += '<div style="padding:10px 20px;display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;"><span style="font-size:11px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.05em;">Command</span><code style="font-size:12px;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + commandM[1] + '</code></div>';
+          }
+          html += '</div></div></div>';
+
+          // Performance metrics section — 4 cards
+          html += '<div class="issues-section" style="margin-bottom:24px;"><div class="issues-header">📈 Performance Metrics</div><div style="padding:16px 20px;">';
+          html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">';
+          html += '<div style="text-align:center;padding:16px;background:var(--bg-hover);border-radius:var(--radius-sm);"><div style="font-size:24px;font-weight:700;color:' + (failures === 0 ? '#22c55e' : '#ef4444') + ';">' + successRate + '</div><div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">Success Rate</div></div>';
+          html += '<div style="text-align:center;padding:16px;background:var(--bg-hover);border-radius:var(--radius-sm);"><div style="font-size:24px;font-weight:700;color:var(--accent);">' + avgDuration + '</div><div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">Avg Duration</div></div>';
+          html += '<div style="text-align:center;padding:16px;background:var(--bg-hover);border-radius:var(--radius-sm);"><div style="font-size:24px;font-weight:700;color:var(--accent);">' + p95Duration + '</div><div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">P95 Duration</div></div>';
+          html += '<div style="text-align:center;padding:16px;background:var(--bg-hover);border-radius:var(--radius-sm);"><div style="font-size:24px;font-weight:700;color:' + (failures > 0 ? '#ef4444' : '#22c55e') + ';">' + failures + '</div><div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">Failures</div></div>';
+          html += '</div></div></div>';
+
+          // Failure details (if any) — compact table
+          if (failureSamples.length > 0) {
+            html += '<div class="issues-section" style="margin-bottom:24px;"><div class="issues-header">🔴 Failure Details</div><div style="padding:12px 20px;">';
+            html += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+            html += '<thead><tr style="border-bottom:1px solid var(--border-subtle);"><th style="text-align:left;padding:6px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-tertiary);font-weight:500;">Run</th><th style="text-align:left;padding:6px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-tertiary);font-weight:500;">Exit Code</th><th style="text-align:left;padding:6px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-tertiary);font-weight:500;">Duration</th></tr></thead>';
+            html += '<tbody>';
+            failureSamples.forEach(function(f, i) {
+              var rowBg = i % 2 === 0 ? 'transparent' : 'var(--bg-hover)';
+              html += '<tr style="border-bottom:1px solid var(--border-subtle);background:' + rowBg + ';"><td style="padding:7px 12px;color:var(--text-secondary);">#' + f.run + '</td><td style="padding:7px 12px;"><span style="color:#ef4444;font-weight:600;">' + f.exitCode + '</span></td><td style="padding:7px 12px;color:var(--text-secondary);">' + f.duration + 's</td></tr>';
+            });
+            html += '</tbody></table>';
+            html += '</div></div>';
+          }
+
+          // Recommendations based on scores
+          const stressRecs = [];
+          if (stStability < 80)   stressRecs.push('Stability score is below 80 — investigate intermittent failures and improve error handling.');
+          if (stPerformance < 80)  stressRecs.push('Performance score is below 80 — consider optimizing response time; average duration may be too high.');
+          if (stResource < 80)     stressRecs.push('Resource score is below 80 — check for resource leaks or excessive memory/CPU usage under load.');
+          if (stConsistency < 80)  stressRecs.push('Consistency score is below 80 — results vary between runs; ensure deterministic behavior.');
+          if (stRecovery < 80)     stressRecs.push('Recovery score is below 80 — the system struggles to recover from failures; add retry logic or graceful degradation.');
+          if (failures > 0)        stressRecs.push(failures + ' failure(s) detected out of ' + totalRuns + ' runs — review failure logs for root cause.');
+
+          if (stressRecs.length > 0) {
+            html += '<div class="issues-section" style="margin-bottom:24px;"><div class="issues-header">💡 Recommendations</div><div style="padding:16px 20px;">';
+            stressRecs.forEach(function(rec) {
+              html += '<div class="issue-item medium" style="margin-bottom:8px;"><div class="issue-desc">' + rec + '</div></div>';
+            });
+            html += '</div></div>';
+          } else {
+            html += '<div class="issues-section" style="margin-bottom:24px;"><div class="issues-header">✅ Assessment</div><div style="padding:16px 20px;">';
+            html += '<div class="issue-item low" style="margin-bottom:0;"><div class="issue-desc">All dimensions scored 80 or above with zero failures. The skill demonstrates excellent stability and performance under stress testing conditions.</div></div>';
+            html += '</div></div>';
+          }
+
+          // Full report — translate legacy Chinese labels to English for display
+          let displayReport = reportText
+            .replace(/# Skill Stress Lab 报告/g, '# Skill Stress Lab Report')
+            .replace(/## 基本信息/g, '## Basic Information')
+            .replace(/\*\*测试轮次\*\*/g, '**Test Runs**')
+            .replace(/\*\*并发度\*\*/g, '**Concurrency**')
+            .replace(/## 五维度评分[^\n]*/g, '## Five-Dimension Scores (0-100)')
+            .replace(/\| 维度 \| 评分 \| 说明 \|/g, '| Dimension | Score | Description |')
+            .replace(/\*\*稳定性\*\*/g, '**Stability**')
+            .replace(/\*\*性能\*\*/g, '**Performance**')
+            .replace(/\*\*资源\*\*/g, '**Resource**')
+            .replace(/\*\*一致性\*\*/g, '**Consistency**')
+            .replace(/\*\*恢复\*\*/g, '**Recovery**')
+            .replace(/成功率表现/g, 'Success rate performance')
+            .replace(/响应时间表现/g, 'Response time performance')
+            .replace(/资源占用情况/g, 'Resource utilization')
+            .replace(/结果一致性/g, 'Result consistency')
+            .replace(/故障恢复能力/g, 'Failure recovery capability')
+            .replace(/综合评分/g, 'Overall Score')
+            .replace(/## 原始测试摘要/g, '## Original Test Summary')
+            .replace(/## 执行参数/g, '## Execution Parameters')
+            .replace(/## 结果概览/g, '## Results Overview')
+            .replace(/- 总次数:/g, '- Total Runs:')
+            .replace(/- 成功次数:/g, '- Successes:')
+            .replace(/- 平均耗时:/g, '- Avg Duration:')
+            .replace(/- P95 耗时:/g, '- P95 Duration:')
+            .replace(/### 失败样本/g, '### Failure Samples')
+            .replace(/> 由 stress_runner 自动生成[^\n]*/g, '> Auto-generated by stress_runner. Only summary results are retained; see log directory for raw stdout/stderr.')
+            .replace(/\*报告由 Skill Stress Lab 自动生成\*/g, '*Report auto-generated by Skill Stress Lab*');
+          html += '<div class="issues-section"><div class="issues-header">📄 Full Report</div><div style="padding:16px 20px;"><div class="raw-report">' + markdownToHtml(displayReport) + '</div></div></div>';
+
+          container.innerHTML = html;
+          return;
+        }
+
+        // Default: contract audit report
+        document.title = 'Contract Audit Report - Health AI';
+        const updatedAt = task.updatedAt ? new Date(task.updatedAt).toLocaleString() : 'Unknown';
+
+        // ── New format: dimension score table (per CONTRACT_AUDIT_GUIDE.md) ───
+        if (/\|\s*[^\|]*Access Control/.test(reportText)) {
+          const scoreMap = {};
+          // Only parse scores from the main "Risk Scores" summary table.
+          // Stop before "Per-File Analysis" to avoid per-file dimension scores
+          // overwriting the aggregate scores.
+          const summarySection = reportText.split(/^##\s+📄\s+Per-File Analysis/m)[0];
+          for (const line of summarySection.split(/\r?\n/)) {
+            if (/Overall Security/.test(line))       { const m = line.match(/\*?\*?(\d+)\/100/); if (m) scoreMap['Overall'] = +m[1]; }
+            if (/Access Control/.test(line))         { const m = line.match(/Access Control[^\|]*\|\s*\*?\*?(\d+)\/100/i); if (m) scoreMap['Access'] = +m[1]; }
+            if (/Financial Security/.test(line))     { const m = line.match(/Financial Security[^\|]*\|\s*\*?\*?(\d+)\/100/i); if (m) scoreMap['Financial'] = +m[1]; }
+            if (/Randomness.*Oracle/.test(line))     { const m = line.match(/Randomness[^\|]*Oracle[^\|]*\|\s*\*?\*?(\d+)\/100/i); if (m) scoreMap['Randomness'] = +m[1]; }
+            if (/DoS Resistance/.test(line))         { const m = line.match(/DoS Resistance[^\|]*\|\s*\*?\*?(\d+)\/100/i); if (m) scoreMap['DoS'] = +m[1]; }
+            if (/Business Logic/.test(line))         { const m = line.match(/Business Logic[^\|]*\|\s*\*?\*?(\d+)\/100/i); if (m) scoreMap['Logic'] = +m[1]; }
+          }
+          function scoreClass(s) {
+            if (s >= 90) return 'low'; if (s >= 70) return 'total'; if (s >= 50) return 'medium'; return 'high';
+          }
+          const dims = [
+            { key:'Overall',    icon:'📊', label:'Overall' },
+            { key:'Access',     icon:'🔐', label:'Access Control' },
+            { key:'Financial',  icon:'💰', label:'Financial Security' },
+            { key:'Randomness', icon:'🎲', label:'Randomness & Oracle' },
+            { key:'DoS',        icon:'⚡', label:'DoS Resistance' },
+            { key:'Logic',      icon:'🛡️', label:'Business Logic' },
+          ];
+          let html = '';
+          html += '<div class="report-header"><h1>📋 Contract Audit Report</h1><div class="report-meta">Task ID: ' + task.taskId + ' · Scanned: ' + updatedAt + '</div></div>';
+          html += '<div class="score-cards-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:20px 0;">';
+          for (const d of dims) {
+            const s = scoreMap[d.key] ?? 0;
+            html += `<div class="risk-card ${scoreClass(s)}" style="text-align:center;padding:16px;border-radius:8px;">`;
+            html += `<div class="risk-number" style="font-size:2rem;font-weight:700;">${s}</div>`;
+            html += `<div class="risk-label">${d.icon} ${d.label}</div></div>`;
+          }
+          html += '</div>';
+          html += '<div style="margin-bottom:20px;padding:8px 12px;background:rgba(99,102,241,0.1);border-radius:6px;font-size:12px;color:#94a3b8;text-align:center;">Score: 90-100 = Excellent 🟢 &nbsp;|&nbsp; 70-89 = Good 🔵 &nbsp;|&nbsp; 50-69 = Caution 🟡 &nbsp;|&nbsp; &lt;50 = Risk 🔴</div>';
+          // Strip title + metadata preamble (everything before the first ## section)
+          // to avoid duplicating info already shown in the page header above.
+          const firstSection = reportText.indexOf('\n## ');
+          let displayText = firstSection >= 0 ? reportText.slice(firstSection + 1) : reportText;
+          // Remove "## Scope Overview" and everything after it (includes disclaimer)
+          const scopeIdx = displayText.indexOf('\n## Scope Overview');
+          if (scopeIdx >= 0) {
+            displayText = displayText.slice(0, scopeIdx);
+          } else {
+            // Fallback: remove trailing disclaimer paragraph after last ---
+            const disclaimerIdx = displayText.lastIndexOf('\n---\n\n*Disclaimer');
+            if (disclaimerIdx >= 0) displayText = displayText.slice(0, disclaimerIdx);
+          }
+          html += '<div class="issues-section"><div class="issues-header">📄 Full Report</div><div style="padding:16px 20px;"><div class="raw-report">' + markdownToHtml(displayText) + '</div></div></div>';
+          container.innerHTML = html;
+          return;
+        }
+
+        // ── Legacy format: severity count cards ─────────────────────────────
+        const detectors = parseReport(reportText);
+
+        if (detectors.length === 0) {
+          container.innerHTML = '<div class="error">⚠️ No issues found in report. <a href="' + API_BASE + '/api/tasks/' + taskId + '/report" target="_blank">View raw report</a></div>';
+          return;
+        }
+
+        const high = detectors.filter(d => d.level === 'high');
+        const medium = detectors.filter(d => d.level === 'medium');
+        const low = detectors.filter(d => d.level === 'low');
+
+        let html = '';
+        html += '<div class="report-header"><h1>📋 Contract Audit Report</h1><div class="report-meta">Task ID: ' + task.taskId + ' · Chain: EVM · Scanned: ' + updatedAt + '</div></div>';
+
+        html += `<div class="risk-dashboard"><div class="risk-card high"><div class="risk-number">${high.length}</div><div class="risk-label">🔴 High</div></div><div class="risk-card medium"><div class="risk-number">${medium.length}</div><div class="risk-label">🟡 Medium</div></div><div class="risk-card low"><div class="risk-number">${low.length}</div><div class="risk-label">🟢 Low</div></div><div class="risk-card total"><div class="risk-number">${detectors.length}</div><div class="risk-label">📊 Total</div></div></div>`;
+
+        html += generateKeyRisksSummary(detectors);
+
+        html += `<div class="issues-section"><div class="issues-header">📑 Issue Details</div>`;
+        if (high.length > 0) html += renderCategory('high', '🔴', high);
+        if (medium.length > 0) html += renderCategory('medium', '🟡', medium);
+        if (low.length > 0) html += renderCategory('low', '🟢', low);
+        html += '</div>';
+
+        container.innerHTML = html;
+        
+        document.querySelectorAll('.category-header').forEach(header => {
+          header.addEventListener('click', () => {
+            const category = header.dataset.category;
+            const list = document.getElementById(`list-${category}`);
+            const arrow = header.querySelector('.category-arrow');
+            list.classList.toggle('expanded');
+            arrow.classList.toggle('expanded');
+          });
+        });
+      } catch (err) {
+        container.innerHTML = `<div class="error">❌ Error: ${err.message}<br><br>Please refresh and try again.</div>`;
+        console.error(err);
+      }
+    }
+    
+    loadReport();
+  </script>
+
+  <!-- Vercel Web Analytics -->
+  <script defer src="/_vercel/insights/script.js"></script>
+</body>
